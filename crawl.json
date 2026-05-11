@@ -1,0 +1,252 @@
+{
+  "name": "Medical News Crawler — Multi Source",
+  "nodes": [
+
+    {
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [100, 300],
+      "parameters": {
+        "rule": { "interval": [{ "field": "hours", "hoursInterval": 6 }] }
+      }
+    },
+
+    {
+      "name": "RSS VnExpress",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [340, 100],
+      "parameters": {
+        "url": "https://vnexpress.net/rss/suc-khoe.rss"
+      }
+    },
+    {
+      "name": "RSS Tuổi Trẻ",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [340, 220],
+      "parameters": {
+        "url": "https://tuoitre.vn/rss/suc-khoe.rss"
+      }
+    },
+    {
+      "name": "RSS Thanh Niên",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [340, 340],
+      "parameters": {
+        "url": "https://thanhnien.vn/rss/suc-khoe.rss"
+      }
+    },
+    {
+      "name": "RSS Dân Trí",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [340, 460],
+      "parameters": {
+        "url": "https://dantri.com.vn/suc-khoe.rss"
+      }
+    },
+    {
+      "name": "RSS SK&ĐS (BYT)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [340, 580],
+      "parameters": {
+        "url": "https://suckhoedoisong.vn/rss/tin-moi-nhat.rss"
+      }
+    },
+
+    {
+      "name": "Tag Source VnExpress",
+      "type": "n8n-nodes-base.set",
+      "position": [560, 100],
+      "parameters": {
+        "values": {
+          "string": [{ "name": "source_name", "value": "VnExpress Sức khỏe" }]
+        }
+      }
+    },
+    {
+      "name": "Tag Source Tuổi Trẻ",
+      "type": "n8n-nodes-base.set",
+      "position": [560, 220],
+      "parameters": {
+        "values": {
+          "string": [{ "name": "source_name", "value": "Tuổi Trẻ Sức khỏe" }]
+        }
+      }
+    },
+    {
+      "name": "Tag Source Thanh Niên",
+      "type": "n8n-nodes-base.set",
+      "position": [560, 340],
+      "parameters": {
+        "values": {
+          "string": [{ "name": "source_name", "value": "Thanh Niên Sức khỏe" }]
+        }
+      }
+    },
+    {
+      "name": "Tag Source Dân Trí",
+      "type": "n8n-nodes-base.set",
+      "position": [560, 460],
+      "parameters": {
+        "values": {
+          "string": [{ "name": "source_name", "value": "Dân Trí Sức khỏe" }]
+        }
+      }
+    },
+    {
+      "name": "Tag Source SK&ĐS",
+      "type": "n8n-nodes-base.set",
+      "position": [560, 580],
+      "parameters": {
+        "values": {
+          "string": [{ "name": "source_name", "value": "Sức khỏe & Đời sống" }]
+        }
+      }
+    },
+
+    {
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.merge",
+      "position": [780, 340],
+      "parameters": {
+        "mode": "append"
+      }
+    },
+
+    {
+      "name": "Crawl Full Article",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [1000, 340],
+      "parameters": {
+        "url": "={{ $json.link }}",
+        "method": "GET",
+        "options": {
+          "timeout": 15000,
+          "response": { "response": { "responseFormat": "text" } }
+        }
+      },
+      "continueOnFail": true
+    },
+
+    {
+      "name": "Extract Article Content",
+      "type": "n8n-nodes-base.code",
+      "position": [1220, 340],
+      "parameters": {
+        "jsCode": "// ─── Simple HTML → text extractor ───────────────────────────────\nconst items = [];\n\nfor (const item of $input.all()) {\n  const html  = item.json.data || '';\n  const rss   = item.json;\n\n  // Xóa script/style/nav/footer tags\n  let text = html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<nav[\\s\\S]*?<\\/nav>/gi, '')\n    .replace(/<footer[\\s\\S]*?<\\/footer>/gi, '')\n    .replace(/<header[\\s\\S]*?<\\/header>/gi, '');\n\n  // Chỉ giữ nội dung trong <article> hoặc <div class*=content/body/detail>\n  const bodyMatch = text.match(\n    /<article[^>]*>([\\s\\S]*?)<\\/article>/i\n  ) || text.match(\n    /<div[^>]*(?:class|id)=['\\\"][^'\\\"]*(?:content|body|detail|article-body)[^'\\\"]*['\\\"][^>]*>([\\s\\S]*?)<\\/div>/i\n  );\n\n  const bodyHtml = bodyMatch ? bodyMatch[1] : text;\n\n  // Strip tags còn lại\n  let clean = bodyHtml\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/&lt;/g, '<')\n    .replace(/&gt;/g, '>')\n    .replace(/&quot;/g, '\"')\n    .replace(/\\s+/g, ' ')\n    .trim();\n\n  // Bỏ bài quá ngắn (lỗi crawl, paywall, v.v.)\n  if (clean.length < 200) continue;\n\n  items.push({\n    json: {\n      source:       rss.source_name || 'Unknown',\n      title:        rss.title       || '',\n      content:      clean,\n      author:       rss.creator     || rss.author || 'Không rõ',\n      published_at: rss.pubDate     || rss.isoDate || '',\n      url:          rss.link        || '',\n      crawled_at:   new Date().toISOString()\n    }\n  });\n}\n\nreturn items;"
+      }
+    },
+
+    {
+      "name": "Load Existing articles.json",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [1440, 200],
+      "parameters": {
+        "operation": "read",
+        "fileName": "/home/node/articles.json",
+        "options": {}
+      },
+      "continueOnFail": true
+    },
+
+    {
+      "name": "Deduplicate & Merge",
+      "type": "n8n-nodes-base.code",
+      "position": [1660, 340],
+      "parameters": {
+        "jsCode": "// Đọc bài cũ từ file (nếu có)\nlet existing = [];\ntry {\n  const fileNode = $('Load Existing articles.json').first();\n  const raw = fileNode.json.data;\n  if (raw) {\n    const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw, 'base64');\n    existing  = JSON.parse(buf.toString('utf8'));\n  }\n} catch (e) {\n  existing = [];\n}\n\n// Set URL đã có\nconst seenUrls = new Set(existing.map(a => a.url));\n\n// Lấy bài mới từ upstream node\nconst newArticles = $input.all()\n  .map(i => i.json)\n  .filter(a => a.url && !seenUrls.has(a.url));\n\nconst merged = [...existing, ...newArticles];\n\n// Giữ tối đa 2000 bài (xóa bài cũ nhất)\nconst trimmed = merged.slice(-2000);\n\nreturn [{ json: { articles: trimmed, new_count: newArticles.length } }];"
+      }
+    },
+
+    {
+      "name": "Save articles.json",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [1880, 340],
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/articles.json",
+        "dataPropertyName": "articles",
+        "options": { "append": false }
+      }
+    },
+
+    {
+      "name": "Skip If No New",
+      "type": "n8n-nodes-base.if",
+      "position": [2100, 340],
+      "parameters": {
+        "conditions": {
+          "number": [{ "value1": "={{ $json.new_count }}", "operation": "larger", "value2": 0 }]
+        }
+      }
+    },
+
+    {
+      "name": "Prepare Ingest Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [2320, 240],
+      "parameters": {
+        "jsCode": "// Lấy chỉ các bài MỚI để gửi lên RAG server (không gửi lại toàn bộ)\n// Lưu ý: lấy new_count bài cuối cùng trong mảng\nconst data        = $input.first().json;\nconst allArticles = data.articles;\nconst newCount    = data.new_count;\n\nconst newArticles = allArticles.slice(-newCount);\n\nreturn [{ json: { articles: newArticles } }];"
+      }
+    },
+
+    {
+      "name": "POST to RAG Server",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [2540, 240],
+      "parameters": {
+        "url": "http://localhost:8000/ingest",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [{ "name": "Content-Type", "value": "application/json" }]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [{ "name": "articles", "value": "={{ $json.articles }}" }]
+        },
+        "options": { "timeout": 60000 }
+      },
+      "continueOnFail": true
+    },
+
+    {
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "position": [2760, 240],
+      "parameters": {
+        "jsCode": "const res = $input.first().json;\nconsole.log(`[RAG Ingest] ingested=${res.total_ingested} skipped=${res.total_skipped} errors=${res.errors?.length || 0}`);\nreturn $input.all();"
+      }
+    }
+
+  ],
+
+  "connections": {
+    "Schedule Trigger":            { "main": [[{ "node": "RSS VnExpress",   "type": "main", "index": 0 },
+                                               { "node": "RSS Tuổi Trẻ",   "type": "main", "index": 0 },
+                                               { "node": "RSS Thanh Niên", "type": "main", "index": 0 },
+                                               { "node": "RSS Dân Trí",    "type": "main", "index": 0 },
+                                               { "node": "RSS SK&ĐS (BYT)","type": "main", "index": 0 }]] },
+
+    "RSS VnExpress":   { "main": [[{ "node": "Tag Source VnExpress",   "type": "main", "index": 0 }]] },
+    "RSS Tuổi Trẻ":   { "main": [[{ "node": "Tag Source Tuổi Trẻ",   "type": "main", "index": 0 }]] },
+    "RSS Thanh Niên": { "main": [[{ "node": "Tag Source Thanh Niên", "type": "main", "index": 0 }]] },
+    "RSS Dân Trí":    { "main": [[{ "node": "Tag Source Dân Trí",    "type": "main", "index": 0 }]] },
+    "RSS SK&ĐS (BYT)":{ "main": [[{ "node": "Tag Source SK&ĐS",      "type": "main", "index": 0 }]] },
+
+    "Tag Source VnExpress":   { "main": [[{ "node": "Merge All Sources", "type": "main", "index": 0 }]] },
+    "Tag Source Tuổi Trẻ":   { "main": [[{ "node": "Merge All Sources", "type": "main", "index": 1 }]] },
+    "Tag Source Thanh Niên": { "main": [[{ "node": "Merge All Sources", "type": "main", "index": 2 }]] },
+    "Tag Source Dân Trí":    { "main": [[{ "node": "Merge All Sources", "type": "main", "index": 3 }]] },
+    "Tag Source SK&ĐS":      { "main": [[{ "node": "Merge All Sources", "type": "main", "index": 4 }]] },
+
+    "Merge All Sources":          { "main": [[{ "node": "Crawl Full Article",        "type": "main", "index": 0 }]] },
+    "Crawl Full Article":          { "main": [[{ "node": "Extract Article Content",  "type": "main", "index": 0 }]] },
+    "Extract Article Content":     { "main": [[{ "node": "Deduplicate & Merge",      "type": "main", "index": 0 }]] },
+    "Load Existing articles.json": { "main": [[{ "node": "Deduplicate & Merge",      "type": "main", "index": 0 }]] },
+    "Deduplicate & Merge":         { "main": [[{ "node": "Save articles.json",        "type": "main", "index": 0 }]] },
+    "Save articles.json":          { "main": [[{ "node": "Skip If No New",            "type": "main", "index": 0 }]] },
+    "Skip If No New":              { "main": [[{ "node": "Prepare Ingest Payload",    "type": "main", "index": 0 }], []] },
+    "Prepare Ingest Payload":      { "main": [[{ "node": "POST to RAG Server",        "type": "main", "index": 0 }]] },
+    "POST to RAG Server":          { "main": [[{ "node": "Log Result",                "type": "main", "index": 0 }]] }
+  }
+}
