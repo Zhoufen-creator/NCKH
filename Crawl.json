@@ -1,0 +1,547 @@
+{
+  "name": "crawl",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "position": [
+        -256,
+        144
+      ],
+      "id": "fb96d443-b8ad-401d-a82b-1041f0d535d9",
+      "typeVersion": 1.3
+    },
+    {
+      "parameters": {
+        "url": "https://vnexpress.net/rss/suc-khoe.rss",
+        "options": {}
+      },
+      "name": "RSS VnExpress",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [
+        0,
+        0
+      ],
+      "id": "afb33612-c00f-4166-8ea1-84d96080b990",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "url": "https://tuoitre.vn/rss/suc-khoe.rss",
+        "options": {}
+      },
+      "name": "RSS Tuổi Trẻ",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [
+        0,
+        144
+      ],
+      "id": "0faba1fc-459b-4afa-a881-0d9be1935cf0",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "url": "https://dantri.com.vn/rss/suc-khoe.rss",
+        "options": {}
+      },
+      "name": "RSS SK&ĐS (BYT)",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "position": [
+        0,
+        288
+      ],
+      "id": "7c050fca-92fe-47b7-b611-235ed4f32c96",
+      "typeVersion": 1.2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "vne-src",
+              "name": "source_name",
+              "value": "VnExpress Sức khỏe",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Tag Source VnExpress",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        240,
+        0
+      ],
+      "id": "be16b42d-2ca7-4023-9d06-46ae8363155b",
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tt-src",
+              "name": "source_name",
+              "value": "Tuổi Trẻ Sức khỏe",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Tag Source Tuổi Trẻ",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        240,
+        144
+      ],
+      "id": "9bb5c952-57f3-4970-a0cf-6a368db79fc3",
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "skds-src",
+              "name": "source_name",
+              "value": "Sức khỏe & Đời sống (BYT)",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "name": "Tag Source SK&ĐS",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        240,
+        288
+      ],
+      "id": "f30ee62e-5a26-448b-b1f8-05ea2c2d557e",
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "name": "Merge All Sources",
+      "type": "n8n-nodes-base.merge",
+      "position": [
+        448,
+        128
+      ],
+      "id": "2650bfdf-cab8-4457-be12-e25e94825a7e",
+      "typeVersion": 3.2,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "batchSize": 10,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        704,
+        144
+      ],
+      "id": "8c0e1b2d-583c-499b-86e7-ed535f3dfb24",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.link || $json.url || $json.guid }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept-Encoding",
+              "value": "gzip, deflate"
+            },
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text",
+              "outputPropertyName": "html_data"
+            }
+          },
+          "timeout": 15000
+        }
+      },
+      "name": "Crawl Full Article",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        864,
+        336
+      ],
+      "id": "81821db8-d998-487d-a676-cc993c6f38fa",
+      "typeVersion": 4.4,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── EXTRACT ARTICLE CONTENT V5 (BẢN HOÀN CHỈNH) ──────────────────────\n\nconst items = [];\nconst staticData = $getWorkflowStaticData('global');\nif (!Array.isArray(staticData.collected)) staticData.collected = [];\n\n// 1. LẤY METADATA TỪ LOOP (Phòng hờ n8n mất data)\nlet originalItems = [];\ntry {\n    originalItems = $items(\"Loop Over Items\", 0, $runIndex);\n} catch (e) {}\n\n// Hàm dọn rác văn bản cơ bản\nfunction clean(text) {\n  return (text || \"\")\n    .replace(/<[^>]+>/g, \" \")\n    .replace(/&nbsp;/g, \" \")\n    .replace(/&amp;/g, \"&\")\n    .replace(/&quot;/g, '\"')\n    .replace(/\\s+/g, \" \")\n    .trim();\n}\n\nlet index = 0;\nfor (const item of $input.all()) {\n  try {\n    const html = item.json.data || item.json.html_data || \"\";\n    \n    // Bỏ qua nếu lỗi mạng hoặc cục HTML trống\n    if (!html || html.length < 50 || item.json.statusCode >= 400) {\n        index++; continue;\n    }\n\n    // 2. TRÍCH XUẤT THÔNG TIN CƠ BẢN (Quét 3 lớp chống mất data)\n    const rss = originalItems[index] ? originalItems[index].json : {};\n\n    const urlMatch = html.match(/<link[^>]*rel=\"canonical\"[^>]*href=\"([^\"]+)\"/i) || [];\n    const ogTitle = (html.match(/<meta[^>]*property=\"og:title\"[^>]*content=\"([^\"]+)\"/i) || [])[1];\n    const metaTitle = (html.match(/<title>([\\s\\S]*?)<\\/title>/i) || [])[1];\n    const metaAuthor = (html.match(/<meta[^>]*name=\"author\"[^>]*content=\"([^\"]+)\"/i) || [])[1];\n    const pubDateMatch = html.match(/<meta[^>]*property=\"article:published_time\"[^>]*content=\"([^\"]+)\"/i) || [];\n\n    const url = rss.link || rss.url || urlMatch[1] || item.json.url || \"\";\n    \n    let title = rss.title || ogTitle || metaTitle || item.json.title || \"Không có tiêu đề\";\n    // Tự động gọt bỏ đuôi tên báo rườm rà trong Title\n    title = clean(title).replace(/\\s*-\\s*(Báo\\s+)?(VnExpress|Tuổi Trẻ|Thanh Niên|Dân Trí|VietNamNet|Sức khỏe).*/i, \"\");\n\n    const author = clean(rss.creator || rss.author || metaAuthor || \"Không rõ\");\n    const date = rss.isoDate || rss.pubDate || pubDateMatch[1] || \"\";\n\n    // Gắn nguồn tự động nếu Node Tag đằng trước bị xịt\n    let source = rss.source_name || item.json.source_name || \"Unknown\";\n    if (source === \"Unknown\" && url) {\n        if (url.includes(\"vnexpress.net\")) source = \"VnExpress Sức khỏe\";\n        else if (url.includes(\"tuoitre.vn\")) source = \"Tuổi Trẻ Sức khỏe\";\n        else if (url.includes(\"dantri.com.vn\")) source = \"Dân Trí Sức khỏe\";\n        else if (url.includes(\"vietnamnet.vn\")) source = \"VietNamNet Sức khỏe\";\n    }\n\n    // 3. BỘ LỌC THÉP (Chém bay Quảng Cáo, Sidebar, Tin Nóng Showbiz)\n    let text = html\n      .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n      .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n      .replace(/<nav[\\s\\S]*?<\\/nav>/gi, '')\n      .replace(/<footer[\\s\\S]*?<\\/footer>/gi, '')\n      .replace(/<header[\\s\\S]*?<\\/header>/gi, '')\n      .replace(/<aside[\\s\\S]*?<\\/aside>/gi, '') \n      .replace(/<div[^>]*class=\"[^\"]*(?:related-news|trending|hot-news)[^\"]*\"[^>]*>[\\s\\S]*?<\\/div>/gi, '');\n\n    // 4. VÉT CẠN ĐÁY (Lấy từ thẻ mở của thân bài cho đến cuối)\n    let bodyHtml = \"\";\n    const startMatch = \n      text.match(/<div[^>]*class=\"[^\"]*singular-content[^\"]*\"[^>]*>([\\s\\S]*)/i) || // Dân Trí\n      text.match(/<div[^>]*class=\"[^\"]*maincontent[^\"]*\"[^>]*>([\\s\\S]*)/i) ||      // VietNamNet\n      text.match(/<div[^>]*class=\"[^\"]*detail-content[^\"]*\"[^>]*>([\\s\\S]*)/i) ||   // Class chung\n      text.match(/<div[^>]*id=\"main-detail\"[^>]*>([\\s\\S]*)/i) ||                   // Tuổi Trẻ\n      text.match(/<div[^>]*class=\"[^\"]*e-magazine-content[^\"]*\"[^>]*>([\\s\\S]*)/i) || // Dân Trí\n      text.match(/<article[^>]*>([\\s\\S]*)/i);                                      // VnExpress\n\n    // Nếu tìm thấy cấu trúc báo chuẩn thì lấy, không thì lấy toàn bộ text đã dọn rác\n    if (startMatch) {\n        bodyHtml = startMatch[1];\n    } else {\n        bodyHtml = text; \n    }\n\n    const content = clean(bodyHtml);\n    \n    // 5. ĐIỀU KIỆN LƯU BÀI (Bài phải dài trên 150 ký tự)\n    if (content.length >= 150) {\n        const article = { \n            source, \n            title, \n            content, \n            author, \n            published_at: date, \n            url, \n            crawled_at: new Date().toISOString() \n        };\n        items.push({ json: article });\n        staticData.collected.push(article);\n    }\n  } catch (err) {\n    console.log(`[Extract] Lỗi bài: ${err.message}`);\n  }\n  index++;\n}\n\n// 6. ĐỐT RÁC RAM (Chống lỗi 503 Out Of Memory của n8n)\n$input.all().forEach(i => { delete i.json.data; delete i.json.html_data; });\n\n// Trả về kết quả, nếu mẻ này toàn bài lỗi thì trả dummy item để Loop không bị sập\nreturn items.length > 0 ? items : [{ json: { _bad_batch: true } }];"
+      },
+      "name": "Extract Article Content",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1072,
+        336
+      ],
+      "id": "14d20bf8-4918-4596-a13f-60fec6b0fa8d",
+      "typeVersion": 2,
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── DEDUPLICATE & MERGE ──────────────────────────────────────────────\n// Đọc bài đã gom từ tất cả batch (qua staticData.collected).\n// So với kho bài cũ (staticData.articles), lọc trùng theo URL.\n// Lưu kết quả lại vào staticData.articles cho lần chạy sau.\n// Clear staticData.collected để lần chạy tiếp theo bắt đầu sạch.\n\nconst staticData = $getWorkflowStaticData('global');\n\nconst newArticlesAll = staticData.collected || [];\nconst existing       = staticData.articles   || [];\n\nconst seenUrls   = new Set(existing.map(a => a.url));\nconst newArticles = newArticlesAll.filter(a => a.url && !seenUrls.has(a.url));\n\n// Giữ tối đa 2000 bài, ưu tiên bài mới nhất\nconst merged = [...existing, ...newArticles].slice(-2000);\n\n// Lưu lại\nstaticData.articles  = merged;\nstaticData.collected = []; // reset cho execution tiếp theo\n\nconsole.log(`[Dedup] +${newArticles.length} mới | ${existing.length} cũ | tổng ${merged.length}`);\n\n// Output JSON + Binary (để Save node ghi file)\nconst jsonStr = JSON.stringify(merged, null, 2);\n\nreturn [{\n  json: { articles: merged, new_count: newArticles.length },\n  binary: {\n    articlesFile: {\n      data:          Buffer.from(jsonStr).toString('base64'),\n      mimeType:      'application/json',\n      fileName:      'articles.json',\n      fileExtension: 'json'\n    }\n  }\n}];"
+      },
+      "name": "Deduplicate & Merge",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1328,
+        144
+      ],
+      "id": "b91aec81-1fe1-4ea4-9e33-9dec59f12e13",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "operation": "write",
+        "fileName": "/home/node/articles.json",
+        "dataPropertyName": "articlesFile",
+        "options": {
+          "append": false
+        }
+      },
+      "name": "Save articles.json",
+      "type": "n8n-nodes-base.readWriteFile",
+      "position": [
+        1552,
+        144
+      ],
+      "id": "d0fbac47-9b95-45a8-9993-9a6e9007f48a",
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.new_count }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "name": "Skip If No New",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        1760,
+        144
+      ],
+      "id": "3688fe2b-47e6-4bc2-8311-610ce35ef52c",
+      "typeVersion": 2.3
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── PREPARE INGEST PAYLOAD ───────────────────────────────────────────\n// Chỉ gửi bài MỚI lên RAG server, không gửi lại toàn bộ kho.\n\nconst data        = $input.first().json;\nconst allArticles = data.articles   || [];\nconst newCount    = data.new_count  || 0;\n\nconst newArticles = newCount > 0 ? allArticles.slice(-newCount) : [];\n\nconsole.log(`[Payload] Chuẩn bị gửi ${newArticles.length} bài mới lên RAG server`);\n\nreturn [{ json: { articles: newArticles } }];"
+      },
+      "name": "Prepare Ingest Payload",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        1984,
+        48
+      ],
+      "id": "94d082db-ac4a-487d-b2af-992245770dbd",
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:8000/ingest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify({ articles: $json.articles }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "name": "POST to RAG Server",
+      "type": "n8n-nodes-base.httpRequest",
+      "position": [
+        2208,
+        48
+      ],
+      "id": "b9debd05-4d7c-4ed4-80c1-886cf58a1497",
+      "typeVersion": 4.4,
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// ── LOG RESULT ───────────────────────────────────────────────────────\nconst res = $input.first().json;\n\nconst ingested = res.total_ingested ?? 0;\nconst skipped  = res.total_skipped  ?? 0;\nconst errors   = res.errors?.length ?? 0;\n\nconst msg = `✅ RAG Ingest xong: ${ingested} bài mới vào DB | ${skipped} trùng bỏ qua | ${errors} lỗi`;\nconsole.log(msg);\n\nreturn [{ json: { status: 'done', ingested, skipped, errors, message: msg } }];"
+      },
+      "name": "Log Result",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        2432,
+        48
+      ],
+      "id": "795ae9d1-0f89-4762-ab37-4e1aa3229f35",
+      "typeVersion": 2
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "RSS VnExpress",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS Tuổi Trẻ",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "RSS SK&ĐS (BYT)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS VnExpress": {
+      "main": [
+        [
+          {
+            "node": "Tag Source VnExpress",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS Tuổi Trẻ": {
+      "main": [
+        [
+          {
+            "node": "Tag Source Tuổi Trẻ",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RSS SK&ĐS (BYT)": {
+      "main": [
+        [
+          {
+            "node": "Tag Source SK&ĐS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Source VnExpress": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tag Source Tuổi Trẻ": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Tag Source SK&ĐS": {
+      "main": [
+        [
+          {
+            "node": "Merge All Sources",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Merge All Sources": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Deduplicate & Merge",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crawl Full Article",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crawl Full Article": {
+      "main": [
+        [
+          {
+            "node": "Extract Article Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Article Content": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deduplicate & Merge": {
+      "main": [
+        [
+          {
+            "node": "Save articles.json",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save articles.json": {
+      "main": [
+        [
+          {
+            "node": "Skip If No New",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Skip If No New": {
+      "main": [
+        [
+          {
+            "node": "Prepare Ingest Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Ingest Payload": {
+      "main": [
+        [
+          {
+            "node": "POST to RAG Server",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "POST to RAG Server": {
+      "main": [
+        [
+          {
+            "node": "Log Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "de941e78-f9e1-4547-881f-b7b2872a7c90",
+  "meta": {
+    "instanceId": "9d956238d72707ac868da00b08c4ffd5beeee7c68bdbfdb902b1c3914ac02ee5"
+  },
+  "id": "zmXLinpvXkdsxZEg",
+  "tags": []
+}
